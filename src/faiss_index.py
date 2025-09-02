@@ -1,3 +1,4 @@
+from src.index_utils import save_index, save_pickle
 # faiss_index.py
 import faiss
 import pickle
