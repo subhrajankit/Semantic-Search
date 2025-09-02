@@ -1,35 +1,36 @@
-from src.index_utils import save_index, save_pickle
-# faiss_index.py
 import faiss
 import pickle
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
-# Load embedding model
+# Load your dataset
+with open("data/texts.pkl", "rb") as f:
+    texts = pickle.load(f)
+
+print(f"Loaded {len(texts)} texts.")
+
+# Load sentence transformer model
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# Sample dataset (replace/add your own)
-texts = [
-    "Machine learning is a field of artificial intelligence.",
-    "Deep learning is a subset of machine learning.",
-    "Python is a popular programming language.",
-    "FAISS is a library for efficient similarity search.",
-    "Neural networks can approximate complex functions."
-]
-
-# Convert texts into embeddings
-embeddings = model.encode(texts, convert_to_numpy=True)
+# Encode all texts to vectors
+print("Encoding texts...")
+embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
+print(f"Embeddings shape: {embeddings.shape}")
 
 # Create FAISS index
-d = embeddings.shape[1]  # dimension of embeddings
-index = faiss.IndexFlatL2(d)  # L2 distance index
+dimension = embeddings.shape[1]
+index = faiss.IndexFlatL2(dimension)  # L2 distance
+print(f"FAISS index created with dimension {dimension}.")
+
+# Add embeddings to index
 index.add(embeddings)
+print(f"Added {index.ntotal} vectors to FAISS index.")
 
-# Save FAISS index
-faiss.write_index(index, "faiss_index.bin")
+# Save index
+faiss.write_index(index, "data/faiss_index.bin")
+print("FAISS index saved as 'data/faiss_index.bin'.")
 
-# Save texts for later retrieval
-with open("texts.pkl", "wb") as f:
-    pickle.dump(texts, f)
-
-print("✅ FAISS index and texts saved successfully!")
+# Optionally save embeddings too for reference
+with open("data/embeddings.pkl", "wb") as f:
+    pickle.dump(embeddings, f)
+print("Embeddings saved as 'data/embeddings.pkl'.")
