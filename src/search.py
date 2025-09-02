@@ -2,6 +2,8 @@ import faiss
 import pickle
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import argparse
+import json
 
 # Load FAISS index and texts
 index = faiss.read_index("data/faiss_index.bin")
@@ -20,27 +22,49 @@ def semantic_search(query, top_k=5, threshold=0.5):
 
     results = []
     for i, idx in enumerate(indices[0]):
-        # Convert distance to similarity (approximate)
-        score = 1 - distances[0][i] / 2
-        if score >= threshold:  # apply filtering
+        score = 1 - distances[0][i] / 2  # similarity score
+        if score >= threshold:
             results.append((score, texts[idx]))
 
     return results
 
-
-if __name__ == "__main__":
-    while True:
-        query = input("\nEnter your search query (or type 'exit' to quit): ")
-        if query.lower() == "exit":
-            print("Exiting search. Goodbye 👋")
-            break
-
-        results = semantic_search(query, top_k=5, threshold=0.5)
-
-        print(f"\nQuery: {query}\n")
-        if results:
+def display_results(query, results, output_format="table"):
+    print(f"\nQuery: {query}\n")
+    if results:
+        if output_format == "table":
             print("Top Results:")
             for rank, (score, text) in enumerate(results, 1):
                 print(f"{rank}. ({score:.2f}) {text}")
+        elif output_format == "json":
+            print(json.dumps([{"rank": i+1, "score": s, "text": t} 
+                              for i, (s, t) in enumerate(results)], indent=2))
         else:
-            print("No relevant results found.")
+            print("⚠️ Invalid format. Showing table format by default.")
+            for rank, (score, text) in enumerate(results, 1):
+                print(f"{rank}. ({score:.2f}) {text}")
+    else:
+        print("No relevant results found.")
+
+def run_interactive():
+    print("🔎 Semantic Search Engine (type 'exit' to quit)\n")
+    while True:
+        query = input("Enter your search query: ")
+        if query.lower() == "exit":
+            print("👋 Exiting search engine.")
+            break
+        results = semantic_search(query)
+        display_results(query, results, output_format="table")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Semantic Search Engine")
+    parser.add_argument("--query", type=str, help="Search query text")
+    parser.add_argument("--top_k", type=int, default=5, help="Number of top results")
+    parser.add_argument("--threshold", type=float, default=0.5, help="Similarity threshold (0-1)")
+    parser.add_argument("--format", type=str, default="table", help="Output format: table or json")
+    args = parser.parse_args()
+
+    if args.query:  # If CLI query is provided
+        results = semantic_search(args.query, top_k=args.top_k, threshold=args.threshold)
+        display_results(args.query, results, output_format=args.format)
+    else:  # Fall back to interactive mode
+        run_interactive()
