@@ -1,0 +1,30 @@
+{
+    "query": "Ankit Kumar",
+    "results": [
+        {
+            "rank": 1,
+            "score": 126.324951171875,
+            "text": "Python is a popular programming language."
+        },
+        {
+            "rank": 2,
+            "score": 127.20823669433594,
+            "text": "FAISS is a library for efficient similarity search."
+        },
+        {
+            "rank": 3,
+            "score": 127.2161865234375,
+            "text": "Neural networks can approximate complex functions."
+        },
+        {
+            "rank": 4,
+            "score": 127.36259460449219,
+            "text": "Deep learning is a subset of machine learning."
+        },
+        {
+            "rank": 5,
+            "score": 127.44319915771484,
+            "text": "Machine learning is a field of artificial intelligence."
+        }
+    ]
+}
