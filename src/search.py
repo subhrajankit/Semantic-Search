@@ -4,8 +4,22 @@ import pickle
 import faiss
 import numpy as np
 import argparse
+import logging
 from sentence_transformers import SentenceTransformer
 from datetime import datetime
+
+# ---------------------------
+# Logging Setup
+# ---------------------------
+if not os.path.exists("logs"):
+    os.makedirs("logs")
+
+logging.basicConfig(
+    filename="logs/semantic_search.log",
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 # ---------------------------
 # Helper Functions
@@ -21,8 +35,7 @@ def load_config():
 
 def save_embeddings_and_index(model_name, texts, index_path, embeddings_path):
     """Build FAISS index from texts and save"""
-    print(f"🔄 Rebuilding FAISS index using model: {model_name} ...")
-
+    logging.info(f"Rebuilding FAISS index using model: {model_name}")
     model = SentenceTransformer(model_name)
 
     # Encode & normalize embeddings for cosine similarity
@@ -39,28 +52,27 @@ def save_embeddings_and_index(model_name, texts, index_path, embeddings_path):
     with open(embeddings_path, "wb") as f:
         pickle.dump(embeddings, f)
 
-    print(f"✅ Index rebuilt and saved at {index_path}")
+    logging.info(f"Index rebuilt and saved at {index_path}")
     return index, model
 
 
 def load_index_and_model(model_name, index_path="data/faiss_index.bin", texts_path="data/texts.pkl"):
     """Load FAISS index and model, rebuild if missing/outdated"""
     if not os.path.exists(texts_path):
+        logging.error("Dataset (texts.pkl) not found in data/")
         raise FileNotFoundError("❌ Dataset (texts.pkl) not found in data/")
 
     # Load texts
     with open(texts_path, "rb") as f:
         texts = pickle.load(f)
 
-    # If index missing → rebuild
     if not os.path.exists(index_path):
-        print("⚠️ FAISS index not found. Rebuilding...")
+        logging.warning("FAISS index not found. Rebuilding...")
         return save_embeddings_and_index(model_name, texts, index_path, "data/embeddings.pkl"), texts
 
-    # Load existing index
     index = faiss.read_index(index_path)
     model = SentenceTransformer(model_name)
-    print("✅ Loaded existing FAISS index.")
+    logging.info("Loaded existing FAISS index successfully.")
     return (index, model), texts
 
 
@@ -75,6 +87,8 @@ def semantic_search(query, index, model, texts, top_k=5, threshold=0.5):
         score = distances[0][i]  # cosine similarity after normalization
         if score >= threshold:
             results.append((score, texts[idx]))
+
+    logging.info(f"Query '{query}' returned {len(results)} results.")
     return results
 
 
@@ -87,6 +101,7 @@ def display_results(query, results, output_format="table"):
             for rank, (score, text) in enumerate(results, 1):
                 print(f"{rank}. ({score:.2f}) {text}")
         elif output_format == "json":
+            import json
             print(json.dumps([{"rank": i+1, "score": s, "text": t}
                               for i, (s, t) in enumerate(results)], indent=2))
     else:
@@ -121,6 +136,7 @@ if __name__ == "__main__":
             query = input("\nQuery: ")
             if query.lower() in ["exit", "quit"]:
                 print("👋 Exiting search.")
+                logging.info("User exited interactive search session.")
                 break
             results = semantic_search(query, index, model, texts, args.top_k, args.threshold)
             display_results(query, results, output_format=args.format)
