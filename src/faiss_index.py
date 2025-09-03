@@ -2,38 +2,66 @@ import faiss
 import pickle
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import os
+import hashlib
 
-# 1. Load your dataset
-with open("data/texts.pkl", "rb") as f:
+DATA_FILE = "data/texts.pkl"
+INDEX_FILE = "data/faiss_index.bin"
+EMBEDDINGS_FILE = "data/embeddings.pkl"
+CHECKSUM_FILE = "data/dataset_checksum.txt"
+
+# Function to compute checksum of dataset
+def compute_checksum(file_path):
+    with open(file_path, "rb") as f:
+        data = f.read()
+        return hashlib.md5(data).hexdigest()
+
+# Load dataset
+with open(DATA_FILE, "rb") as f:
     texts = pickle.load(f)
 
 print(f"Loaded {len(texts)} texts.")
 
-# 2. Load sentence transformer model
+# Compute checksum
+new_checksum = compute_checksum(DATA_FILE)
+
+# Check if index + checksum already exist
+if os.path.exists(INDEX_FILE) and os.path.exists(CHECKSUM_FILE):
+    with open(CHECKSUM_FILE, "r") as f:
+        old_checksum = f.read().strip()
+    if old_checksum == new_checksum:
+        print("✅ Dataset unchanged. Skipping FAISS index rebuild.")
+        exit(0)
+
+print("⚡ Dataset changed or index missing. Rebuilding FAISS index...")
+
+# Load sentence transformer model
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# 3. Encode all texts to vectors
+# Encode all texts to vectors
 print("Encoding texts...")
 embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
-print(f"Embeddings shape: {embeddings.shape}")
 
-# 4. Normalize embeddings (so inner product = cosine similarity)
+# Normalize embeddings for cosine similarity
 faiss.normalize_L2(embeddings)
+print(f"Embeddings normalized. Shape: {embeddings.shape}")
 
-# 5. Create FAISS index (Inner Product → cosine similarity after normalization)
+# Create FAISS index (Inner Product for cosine similarity)
 dimension = embeddings.shape[1]
-index = faiss.IndexFlatIP(dimension)  # IP = Inner Product
-print(f"FAISS index created with dimension {dimension} using cosine similarity.")
+index = faiss.IndexFlatIP(dimension)
+print(f"FAISS index (cosine similarity) created with dimension {dimension}.")
 
-# 6. Add embeddings to index
+# Add embeddings
 index.add(embeddings)
 print(f"Added {index.ntotal} vectors to FAISS index.")
 
-# 7. Save index
-faiss.write_index(index, "data/faiss_index.bin")
-print("FAISS index saved as 'data/faiss_index.bin'.")
-
-# 8. Optionally save normalized embeddings too
-with open("data/embeddings.pkl", "wb") as f:
+# Save index and embeddings
+faiss.write_index(index, INDEX_FILE)
+with open(EMBEDDINGS_FILE, "wb") as f:
     pickle.dump(embeddings, f)
-print("Normalized embeddings saved as 'data/embeddings.pkl'.")
+
+# Save new checksum
+with open(CHECKSUM_FILE, "w") as f:
+    f.write(new_checksum)
+
+print("✅ FAISS index and embeddings updated successfully.")
