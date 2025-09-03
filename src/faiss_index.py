@@ -1,67 +1,67 @@
 import faiss
 import pickle
+import os
 from sentence_transformers import SentenceTransformer
 import numpy as np
-import os
-import hashlib
+from datetime import datetime
 
-DATA_FILE = "data/texts.pkl"
-INDEX_FILE = "data/faiss_index.bin"
-EMBEDDINGS_FILE = "data/embeddings.pkl"
-CHECKSUM_FILE = "data/dataset_checksum.txt"
+# Paths
+texts_path = "data/texts.pkl"
+index_path = "data/faiss_index.bin"
+embeddings_path = "data/embeddings.pkl"
+meta_path = "data/index_meta.pkl"  # store dataset timestamp
 
-# Function to compute checksum of dataset
-def compute_checksum(file_path):
-    with open(file_path, "rb") as f:
-        data = f.read()
-        return hashlib.md5(data).hexdigest()
+# Step 1: Load dataset
+if not os.path.exists(texts_path):
+    raise FileNotFoundError("❌ Dataset file not found: data/texts.pkl")
 
-# Load dataset
-with open(DATA_FILE, "rb") as f:
+with open(texts_path, "rb") as f:
     texts = pickle.load(f)
 
-print(f"Loaded {len(texts)} texts.")
+print(f"✅ Loaded {len(texts)} texts.")
 
-# Compute checksum
-new_checksum = compute_checksum(DATA_FILE)
+# Step 2: Check if index already exists
+dataset_mtime = os.path.getmtime(texts_path)
 
-# Check if index + checksum already exist
-if os.path.exists(INDEX_FILE) and os.path.exists(CHECKSUM_FILE):
-    with open(CHECKSUM_FILE, "r") as f:
-        old_checksum = f.read().strip()
-    if old_checksum == new_checksum:
-        print("✅ Dataset unchanged. Skipping FAISS index rebuild.")
+if os.path.exists(index_path) and os.path.exists(meta_path):
+    with open(meta_path, "rb") as f:
+        meta = pickle.load(f)
+    
+    if meta.get("dataset_mtime") == dataset_mtime:
+        print("⚡ FAISS index is up-to-date. Skipping rebuild.")
         exit(0)
 
-print("⚡ Dataset changed or index missing. Rebuilding FAISS index...")
+print("🔄 Rebuilding FAISS index...")
 
-# Load sentence transformer model
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# Step 3: Load embedding model
+model_name = "all-MiniLM-L6-v2"
+print(f"🔄 Using model: {model_name}")
+model = SentenceTransformer(model_name)
 
-# Encode all texts to vectors
-print("Encoding texts...")
+# Step 4: Encode texts into embeddings
+print("⚡ Encoding texts into embeddings...")
 embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
 
-# Normalize embeddings for cosine similarity
+# Normalize for cosine similarity
 faiss.normalize_L2(embeddings)
-print(f"Embeddings normalized. Shape: {embeddings.shape}")
+print("✅ Normalized embeddings for cosine similarity.")
 
-# Create FAISS index (Inner Product for cosine similarity)
+# Step 5: Create FAISS index
 dimension = embeddings.shape[1]
-index = faiss.IndexFlatIP(dimension)
-print(f"FAISS index (cosine similarity) created with dimension {dimension}.")
+index = faiss.IndexFlatIP(dimension)  # cosine similarity
+print(f"✅ FAISS index created with dimension {dimension}.")
 
-# Add embeddings
+# Step 6: Add embeddings
 index.add(embeddings)
-print(f"Added {index.ntotal} vectors to FAISS index.")
+print(f"✅ Added {index.ntotal} vectors to FAISS index.")
 
-# Save index and embeddings
-faiss.write_index(index, INDEX_FILE)
-with open(EMBEDDINGS_FILE, "wb") as f:
+# Step 7: Save index + embeddings
+faiss.write_index(index, index_path)
+with open(embeddings_path, "wb") as f:
     pickle.dump(embeddings, f)
 
-# Save new checksum
-with open(CHECKSUM_FILE, "w") as f:
-    f.write(new_checksum)
+# Step 8: Save metadata (to detect dataset changes next run)
+with open(meta_path, "wb") as f:
+    pickle.dump({"dataset_mtime": dataset_mtime}, f)
 
-print("✅ FAISS index and embeddings updated successfully.")
+print("💾 FAISS index and metadata saved successfully.")
