@@ -1,0 +1,10 @@
+Artificial Intelligence is transforming the world.
+Machine learning is a subset of Artificial Intelligence.
+Deep learning uses neural networks to solve problems.
+Python is a popular programming language for AI.
+Natural Language Processing helps machines understand human language.
+Semantic search improves information retrieval.
+FAISS is a library for efficient similarity search.
+OpenAI develops advanced AI models.
+Google uses AI in search engines and recommendations.
+Microsoft invests heavily in AI research.

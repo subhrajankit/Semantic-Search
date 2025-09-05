@@ -1,67 +1,74 @@
-import faiss
-import pickle
 import os
+import json
+import pickle
+import faiss
+import argparse
 from sentence_transformers import SentenceTransformer
-import numpy as np
-from datetime import datetime
 
-# Paths
-texts_path = "data/texts.pkl"
-index_path = "data/faiss_index.bin"
-embeddings_path = "data/embeddings.pkl"
-meta_path = "data/index_meta.pkl"  # store dataset timestamp
+# ---------------------------
+# Helper Functions
+# ---------------------------
 
-# Step 1: Load dataset
-if not os.path.exists(texts_path):
-    raise FileNotFoundError("❌ Dataset file not found: data/texts.pkl")
+def load_texts(texts_path):
+    """Load dataset from .pkl, .txt, or .json"""
+    ext = os.path.splitext(texts_path)[1].lower()
 
-with open(texts_path, "rb") as f:
-    texts = pickle.load(f)
+    if ext == ".pkl":
+        with open(texts_path, "rb") as f:
+            return pickle.load(f)
+    elif ext == ".txt":
+        with open(texts_path, "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+    elif ext == ".json":
+        with open(texts_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                if all(isinstance(d, str) for d in data):
+                    return data
+                elif all(isinstance(d, dict) and "text" in d for d in data):
+                    return [d["text"] for d in data]
+            raise ValueError("Invalid JSON format. Must be list of strings or list of {text: ...}")
+    else:
+        raise ValueError(f"Unsupported dataset format: {ext}")
 
-print(f"✅ Loaded {len(texts)} texts.")
 
-# Step 2: Check if index already exists
-dataset_mtime = os.path.getmtime(texts_path)
+def build_faiss_index(model_name, texts, index_path, embeddings_path):
+    """Build and save FAISS index"""
+    print(f"🔄 Building FAISS index with model: {model_name}")
 
-if os.path.exists(index_path) and os.path.exists(meta_path):
-    with open(meta_path, "rb") as f:
-        meta = pickle.load(f)
-    
-    if meta.get("dataset_mtime") == dataset_mtime:
-        print("⚡ FAISS index is up-to-date. Skipping rebuild.")
-        exit(0)
+    model = SentenceTransformer(model_name)
 
-print("🔄 Rebuilding FAISS index...")
+    # Encode & normalize embeddings for cosine similarity
+    embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
+    faiss.normalize_L2(embeddings)
 
-# Step 3: Load embedding model
-model_name = "all-MiniLM-L6-v2"
-print(f"🔄 Using model: {model_name}")
-model = SentenceTransformer(model_name)
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatIP(dimension)
+    index.add(embeddings)
 
-# Step 4: Encode texts into embeddings
-print("⚡ Encoding texts into embeddings...")
-embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
+    # Save index and embeddings
+    faiss.write_index(index, index_path)
+    with open(embeddings_path, "wb") as f:
+        pickle.dump(embeddings, f)
 
-# Normalize for cosine similarity
-faiss.normalize_L2(embeddings)
-print("✅ Normalized embeddings for cosine similarity.")
+    print(f"✅ Saved FAISS index → {index_path}")
+    print(f"✅ Saved embeddings → {embeddings_path}")
 
-# Step 5: Create FAISS index
-dimension = embeddings.shape[1]
-index = faiss.IndexFlatIP(dimension)  # cosine similarity
-print(f"✅ FAISS index created with dimension {dimension}.")
 
-# Step 6: Add embeddings
-index.add(embeddings)
-print(f"✅ Added {index.ntotal} vectors to FAISS index.")
+# ---------------------------
+# Main
+# ---------------------------
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Build FAISS Index")
+    parser.add_argument("--texts", type=str, default="data/texts.pkl", help="Dataset path (.pkl, .txt, .json)")
+    parser.add_argument("--index", type=str, default="data/faiss_index.bin", help="Path to save FAISS index")
+    parser.add_argument("--embeddings", type=str, default="data/embeddings.pkl", help="Path to save embeddings")
+    parser.add_argument("--model", type=str, default="all-MiniLM-L6-v2", help="SentenceTransformer model name")
+    args = parser.parse_args()
 
-# Step 7: Save index + embeddings
-faiss.write_index(index, index_path)
-with open(embeddings_path, "wb") as f:
-    pickle.dump(embeddings, f)
+    # Load dataset
+    texts = load_texts(args.texts)
+    print(f"📂 Loaded {len(texts)} texts from {args.texts}")
 
-# Step 8: Save metadata (to detect dataset changes next run)
-with open(meta_path, "wb") as f:
-    pickle.dump({"dataset_mtime": dataset_mtime}, f)
-
-print("💾 FAISS index and metadata saved successfully.")
+    # Build index
+    build_faiss_index(args.model, texts, args.index, args.embeddings)
