@@ -1,7 +1,8 @@
-# save_dataset.py
+# saved_database.py
 import pickle
+import os
 
-texts = [
+DATA = [
     # Technology
     "Machine learning is a subset of artificial intelligence.",
     "Deep learning uses neural networks for solving complex tasks.",
@@ -38,8 +39,11 @@ texts = [
     "The Earth revolves around the Sun once every 365 days."
 ]
 
+# Ensure data folder exists
+os.makedirs("data", exist_ok=True)
+
 # Save dataset
 with open("data/texts.pkl", "wb") as f:
-    pickle.dump(texts, f)
+    pickle.dump(DATA, f)
 
-print(f"Saved {len(texts)} texts to data/texts.pkl")
+print(f"✅ Saved {len(DATA)} texts into data/texts.pkl")
